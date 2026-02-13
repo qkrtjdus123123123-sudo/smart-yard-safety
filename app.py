@@ -357,6 +357,44 @@ with tab_monitor:
             st.image(pil_img, use_container_width=True)
         st.caption("실시간 웹캠 피드 (MediaPipe Pose 분석)")
 
+    st.markdown("---")
+    st.caption("휴대폰·태블릿 또는 웹캠이 안 될 때: 아래에서 카메라로 사진을 찍으면 포즈·추락 분석을 할 수 있습니다.")
+    photo = st.camera_input("📸 카메라로 사진 촬영하여 분석")
+    if photo:
+        pose_tasks = _pose_with_tasks_api(use_data_model_only=use_data_model_only)
+        if pose_tasks is None:
+            st.warning("분석 모델을 불러올 수 없습니다. 표준 모델을 선택했는지 확인하세요.")
+        else:
+            detector, vision_module, drawing_utils_module, drawing_styles_module = pose_tasks
+            img_pil = Image.open(photo).convert("RGB")
+            rgb = np.asarray(img_pil)
+            if not rgb.flags.c_contiguous:
+                rgb = np.ascontiguousarray(rgb)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            detection_result = detector.detect(mp_image)
+            rgb = draw_pose_tasks(rgb, detection_result, vision_module, drawing_utils_module, drawing_styles_module)
+            now = datetime.now()
+            time_str = now.strftime("%H:%M:%S")
+            h, w = rgb.shape[:2]
+            cv2.putText(rgb, f"분석 {time_str}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 170), 2)
+            fall_detected = False
+            if detect_fall and detection_result.pose_landmarks:
+                landmarks = detection_result.pose_landmarks[0]
+                fall_detected, _ = check_fall(landmarks, sensitivity=sensitivity, use_velocity=False)
+                if fall_detected:
+                    alert_text = f"알림: [{time_str}] {zone_number}번 구역 추락 의심 발생!"
+                    st.session_state.alerts.insert(0, {"time": time_str, "type": "추락 의심", "level": "danger", "msg": alert_text})
+                    snapshot_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                    st.session_state.snapshots.insert(0, (time_str, snapshot_bgr))
+                    if len(st.session_state.snapshots) > st.session_state.max_snapshots:
+                        st.session_state.snapshots = st.session_state.snapshots[: st.session_state.max_snapshots]
+                    cv2.putText(rgb, "FALL DETECTED", (w // 2 - 100, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+            st.image(Image.fromarray(rgb), use_container_width=True)
+            if fall_detected:
+                st.error("⚠️ 추락 의심으로 감지되었습니다. 알림 목록에 추가되었습니다.")
+            else:
+                st.success("분석 완료. 포즈가 정상 범위입니다.")
+
     with col_alerts:
         if st.session_state.alerts:
             st.markdown('<span style="color:#00d4aa;">● 위험 감지됨</span>', unsafe_allow_html=True)

@@ -25,6 +25,7 @@ DATA_AI_MODEL_ZIP = os.path.join(DATA_BASE, "선박·해양플랜트 스마트 �
 DATA_MODEL_EXTRACT_DIR = os.path.join(DATA_BASE, "ai_model_extracted")
 POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
 POSE_MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pose_landmarker_lite.task")
+HELMET_MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "helmet_best.pt")
 
 st.set_page_config(
     page_title="Smart Yard Safety System",
@@ -200,19 +201,18 @@ def check_fire(rgb, sensitivity=50):
 
 
 def _get_helmet_model():
-    """안전모 감지용 YOLO 모델 lazy load. HF repo 실패 시 직접 URL로 시도."""
+    """안전모 감지용 YOLO 모델 lazy load. 저장소 내 models/helmet_best.pt 우선(다운로드 없음)."""
     cached = getattr(st.session_state, "helmet_yolo_model", None)
     if cached is not None and cached is not False:
         return cached
-    err_msg = getattr(st.session_state, "helmet_model_error", None)
     try:
         from ultralytics import YOLO
-        with st.spinner("안전모 AI 모델 로딩 중… (최초 1회 다운로드)"):
-            # 1) HF repo 이름으로 로드 (일부 환경에서 실패할 수 있음)
-            try:
-                m = YOLO("sharathhhhh/safetyHelmet-detection-yolov8")
-            except Exception:
-                # 2) 실패 시 .pt 직접 URL로 로드 (네트워크만 되면 동작)
+        with st.spinner("안전모 AI 모델 로딩 중…"):
+            # 1) 저장소에 포함된 로컬 파일 사용 (Cloud/오프라인 동작)
+            if os.path.isfile(HELMET_MODEL_PATH):
+                m = YOLO(HELMET_MODEL_PATH)
+            else:
+                # 2) 없으면 URL에서 시도 (로컬에서만 사용 시)
                 m = YOLO("https://huggingface.co/sharathhhhh/safetyHelmet-detection-yolov8/resolve/main/best.pt")
         st.session_state.helmet_yolo_model = m
         if "helmet_model_error" in st.session_state:

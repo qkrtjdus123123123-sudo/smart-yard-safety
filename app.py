@@ -200,17 +200,26 @@ def check_fire(rgb, sensitivity=50):
 
 
 def _get_helmet_model():
-    """안전모 감지용 YOLO 모델 lazy load (Hugging Face: safetyHelmet-detection-yolov8)."""
+    """안전모 감지용 YOLO 모델 lazy load. HF repo 실패 시 직접 URL로 시도."""
     cached = getattr(st.session_state, "helmet_yolo_model", None)
     if cached is not None and cached is not False:
         return cached
+    err_msg = getattr(st.session_state, "helmet_model_error", None)
     try:
         from ultralytics import YOLO
         with st.spinner("안전모 AI 모델 로딩 중… (최초 1회 다운로드)"):
-            m = YOLO("sharathhhhh/safetyHelmet-detection-yolov8")
+            # 1) HF repo 이름으로 로드 (일부 환경에서 실패할 수 있음)
+            try:
+                m = YOLO("sharathhhhh/safetyHelmet-detection-yolov8")
+            except Exception:
+                # 2) 실패 시 .pt 직접 URL로 로드 (네트워크만 되면 동작)
+                m = YOLO("https://huggingface.co/sharathhhhh/safetyHelmet-detection-yolov8/resolve/main/best.pt")
         st.session_state.helmet_yolo_model = m
+        if "helmet_model_error" in st.session_state:
+            del st.session_state.helmet_model_error
         return m
-    except Exception:
+    except Exception as e:
+        st.session_state.helmet_model_error = str(e)
         return None
 
 
@@ -221,7 +230,11 @@ def check_helmet(rgb, conf_threshold=0.35):
     """
     model = _get_helmet_model()
     if model is None:
-        return False, "안전모 모델을 불러올 수 없습니다."
+        detail = getattr(st.session_state, "helmet_model_error", None)
+        msg = "안전모 모델을 불러올 수 없습니다."
+        if detail:
+            msg += " (" + (detail[:120] + "…" if len(detail) > 120 else detail) + ")"
+        return False, msg
     try:
         results = model(rgb, conf=conf_threshold, verbose=False)
         for r in results:

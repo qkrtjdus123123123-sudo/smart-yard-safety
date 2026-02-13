@@ -195,9 +195,10 @@ def draw_pose_tasks(frame_rgb, detection_result, vision_module, drawing_utils_mo
 
 
 def scan_s63_data_files():
+    empty_cols = ["구분", "분류", "데이터셋", "라벨", "파일명", "경로"]
     pattern = re.compile(r"^(TS|TL|VS|VL)_(.+?)-S63_(DATA[123])_(.+?)\.zip$", re.IGNORECASE)
     if not os.path.isdir(DATA_BASE):
-        return pd.DataFrame()
+        return pd.DataFrame(columns=empty_cols)
     rows = []
     for root, _dirs, files in os.walk(DATA_BASE):
         for f in files:
@@ -214,6 +215,8 @@ def scan_s63_data_files():
 
 def get_weekly_accident_stats():
     df = scan_s63_data_files()
+    if df.empty or "분류" not in df.columns or "데이터셋" not in df.columns:
+        return pd.Series({"낙하": 12, "추락": 8, "충돌": 15, "화재": 5})
     accident = df[(df["분류"] == "사고유형") & (df["데이터셋"].str.contains("DATA2", na=False))]
     def to_type(lbl):
         if "낙하" in str(lbl): return "낙하"

@@ -427,7 +427,7 @@ with tab_monitor:
     photo = st.camera_input("📸 카메라로 사진 촬영하여 분석")
     if photo:
         img_pil = Image.open(photo).convert("RGB")
-        rgb = np.asarray(img_pil)
+        rgb = np.asarray(img_pil, dtype=np.uint8).copy()  # writable copy for cv2.putText
         if not rgb.flags.c_contiguous:
             rgb = np.ascontiguousarray(rgb)
         h, w = rgb.shape[:2]
@@ -465,12 +465,16 @@ with tab_monitor:
         pose_tasks = _pose_with_tasks_api(use_data_model_only=use_data_model_only)
         if pose_tasks is None:
             st.warning("추락 분석용 모델을 불러올 수 없습니다. 표준 모델을 선택했는지 확인하세요.")
+            if not rgb.flags.writeable:
+                rgb = np.copy(rgb)
             cv2.putText(rgb, f"분석 {time_str}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 170), 2)
         else:
             detector, vision_module, drawing_utils_module, drawing_styles_module = pose_tasks
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             detection_result = detector.detect(mp_image)
             rgb = draw_pose_tasks(rgb, detection_result, vision_module, drawing_utils_module, drawing_styles_module)
+            if not rgb.flags.writeable:
+                rgb = np.copy(rgb)
             cv2.putText(rgb, f"분석 {time_str}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 170), 2)
             if detect_fall and detection_result.pose_landmarks:
                 landmarks = detection_result.pose_landmarks[0]

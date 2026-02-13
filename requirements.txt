@@ -1,4 +1,4 @@
-# Streamlit Cloud 배포용
+# Streamlit Cloud
 streamlit>=1.28.0,<1.40.0
 opencv-python-headless>=4.8.0,<4.10.0
 numpy>=1.24.0,<2.0.0
@@ -7,3 +7,4 @@ mediapipe>=0.10.0
 pandas>=2.0.0
 plotly>=5.18.0
 openpyxl>=3.1.0
+ultralytics>=8.0.0,<9.0.0

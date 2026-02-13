@@ -199,6 +199,44 @@ def check_fire(rgb, sensitivity=50):
     return ratio >= thresh, ratio
 
 
+def _get_helmet_model():
+    """안전모 감지용 YOLO 모델 lazy load (Hugging Face: safetyHelmet-detection-yolov8)."""
+    cached = getattr(st.session_state, "helmet_yolo_model", None)
+    if cached is not None and cached is not False:
+        return cached
+    try:
+        from ultralytics import YOLO
+        with st.spinner("안전모 AI 모델 로딩 중… (최초 1회 다운로드)"):
+            m = YOLO("sharathhhhh/safetyHelmet-detection-yolov8")
+        st.session_state.helmet_yolo_model = m
+        return m
+    except Exception:
+        return None
+
+
+def check_helmet(rgb, conf_threshold=0.35):
+    """
+    YOLO 안전모 모델로 이미지 분석. without_helmet 감지 시 True 반환.
+    반환: (no_helmet_detected: bool, error_message: str | None)
+    """
+    model = _get_helmet_model()
+    if model is None:
+        return False, "안전모 모델을 불러올 수 없습니다."
+    try:
+        results = model(rgb, conf=conf_threshold, verbose=False)
+        for r in results:
+            if r.boxes is None or len(r.boxes) == 0:
+                continue
+            names = r.names or {}
+            for cls_id in r.boxes.cls.cpu().numpy().astype(int):
+                name = names.get(int(cls_id), "")
+                if name == "without_helmet" or "without" in (name or "").lower():
+                    return True, None
+        return False, None
+    except Exception as e:
+        return False, str(e)
+
+
 def draw_pose_tasks(frame_rgb, detection_result, vision_module, drawing_utils_module, drawing_styles_module):
     if not detection_result.pose_landmarks:
         return frame_rgb
@@ -385,7 +423,7 @@ with tab_monitor:
         st.caption("실시간 웹캠 피드 (MediaPipe Pose 분석)")
 
     st.markdown("---")
-    st.caption("휴대폰·태블릿 또는 웹캠이 안 될 때: 아래에서 카메라로 사진을 찍으면 추락·화재·안전모(안내) 분석을 할 수 있습니다.")
+    st.caption("휴대폰·태블릿 또는 웹캠이 안 될 때: 아래에서 카메라로 사진을 찍으면 추락·화재·안전모 분석을 할 수 있습니다.")
     photo = st.camera_input("📸 카메라로 사진 촬영하여 분석")
     if photo:
         img_pil = Image.open(photo).convert("RGB")
@@ -408,9 +446,19 @@ with tab_monitor:
                 if len(st.session_state.snapshots) > st.session_state.max_snapshots:
                     st.session_state.snapshots = st.session_state.snapshots[: st.session_state.max_snapshots]
 
-        # 안전모: 전용 모델 없음 → 안내만
+        # 안전모 분석 (YOLO)
+        helmet_violation = False
         if detect_helmet:
-            st.info("안전모 감지는 전용 AI 모델이 필요해, 현재 사진 분석에서는 지원하지 않습니다. 실시간 웹캠에서도 동일합니다.")
+            helmet_violation, helmet_err = check_helmet(rgb)
+            if helmet_err:
+                st.warning("안전모 분석: " + helmet_err)
+            elif helmet_violation:
+                alert_text = f"알림: [{time_str}] {zone_number}번 구역 안전모 미착용 감지!"
+                st.session_state.alerts.insert(0, {"time": time_str, "type": "안전모 미착용", "level": "danger", "msg": alert_text})
+                snapshot_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                st.session_state.snapshots.insert(0, (time_str, snapshot_bgr))
+                if len(st.session_state.snapshots) > st.session_state.max_snapshots:
+                    st.session_state.snapshots = st.session_state.snapshots[: st.session_state.max_snapshots]
 
         # 추락 분석 (MediaPipe Pose)
         fall_detected = False
@@ -437,6 +485,9 @@ with tab_monitor:
                     cv2.putText(rgb, "FALL DETECTED", (w // 2 - 100, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
         if fire_detected:
             cv2.putText(rgb, "FIRE DETECTED", (w // 2 - 90, 80 if fall_detected else 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+        if helmet_violation:
+            y_helmet = 110 if (fall_detected and fire_detected) else (80 if (fall_detected or fire_detected) else 50)
+            cv2.putText(rgb, "NO HELMET", (w // 2 - 80, y_helmet), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
 
         st.image(Image.fromarray(rgb), use_column_width=True)
         msgs = []
@@ -444,10 +495,12 @@ with tab_monitor:
             msgs.append("추락 의심")
         if fire_detected:
             msgs.append("화재 의심")
+        if helmet_violation:
+            msgs.append("안전모 미착용")
         if msgs:
             st.error("⚠️ " + ", ".join(msgs) + " 알림 목록에 추가되었습니다.")
         else:
-            st.success("분석 완료. 감지된 위험 없음." + (" (안전모는 전용 모델 필요)" if detect_helmet else ""))
+            st.success("분석 완료. 감지된 위험 없음.")
 
     with col_alerts:
         if st.session_state.alerts:

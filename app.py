@@ -341,7 +341,7 @@ with tab_monitor:
 
                     if fall_detected:
                         cv2.putText(rgb, "FALL DETECTED", (w // 2 - 100, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
-                    video_placeholder.image(rgb, use_container_width=True, channels="RGB")
+                    video_placeholder.image(rgb, use_column_width=True, channels="RGB")
                 cap.release()
                 status_placeholder.success("웹캠 분석을 종료했습니다. 알림과 최근 로그를 확인하세요.")
                 st.rerun()
@@ -354,7 +354,7 @@ with tab_monitor:
             cv2.putText(placeholder_img, "Press [Webcam On] to start", (140, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 160, 170), 1)
             rgb_placeholder = cv2.cvtColor(placeholder_img, cv2.COLOR_BGR2RGB)
             pil_img = Image.fromarray(rgb_placeholder)
-            st.image(pil_img, use_container_width=True)
+            st.image(pil_img, use_column_width=True)
         st.caption("실시간 웹캠 피드 (MediaPipe Pose 분석)")
 
     st.markdown("---")
@@ -389,7 +389,7 @@ with tab_monitor:
                     if len(st.session_state.snapshots) > st.session_state.max_snapshots:
                         st.session_state.snapshots = st.session_state.snapshots[: st.session_state.max_snapshots]
                     cv2.putText(rgb, "FALL DETECTED", (w // 2 - 100, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
-            st.image(Image.fromarray(rgb), use_container_width=True)
+            st.image(Image.fromarray(rgb), use_column_width=True)
             if fall_detected:
                 st.error("⚠️ 추락 의심으로 감지되었습니다. 알림 목록에 추가되었습니다.")
             else:
@@ -420,7 +420,7 @@ with tab_monitor:
                     ts_str, img_bgr = snapshots[idx]
                     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
                     with col:
-                        st.image(img_rgb, use_container_width=True, channels="RGB")
+                        st.image(img_rgb, use_column_width=True, channels="RGB")
                         st.caption(f"추락 의심 · {ts_str}")
     else:
         st.caption("위험 감지 시 해당 순간의 스냅샷이 여기에 표시됩니다.")
@@ -435,7 +435,7 @@ with tab_stats:
     df_pie.columns = ["사고유형", "건수"]
     fig = px.pie(df_pie, values="건수", names="사고유형", title="사고 유형별 발생 비율 (최근 1주)", color_discrete_sequence=px.colors.qualitative.Set3)
     fig.update_layout(paper_bgcolor="rgba(14,17,23,0)", plot_bgcolor="rgba(14,17,23,0)", font={"color": "#fafafa"}, legend={"font": {"color": "#fafafa"}})
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_column_width=True)
 
     st.markdown("---")
     st.subheader("📈 트렌드 분석")
@@ -448,14 +448,14 @@ with tab_stats:
         df_hour = pd.DataFrame({"시간대(시)": [f"{h}시" for h in hours], "건수": counts_by_hour})
         fig_hour = px.bar(df_hour, x="시간대(시)", y="건수", title="시간대별 사고 발생 건수 (최근 1주)", color_discrete_sequence=["#00d4aa"])
         fig_hour.update_layout(paper_bgcolor="rgba(14,17,23,0)", plot_bgcolor="rgba(14,17,23,0)", font={"color": "#fafafa"}, xaxis_tickangle=-45)
-        st.plotly_chart(fig_hour, use_container_width=True)
+        st.plotly_chart(fig_hour, use_column_width=True)
     with col_t2:
         zones = ["1번 구역", "2번 구역", "3번 구역", "4번 구역"]
         counts_by_zone = [4, 7, 12, 5]
         df_zone = pd.DataFrame({"구역": zones, "건수": counts_by_zone})
         fig_zone = px.bar(df_zone, x="구역", y="건수", title="구역별 사고 발생 건수 (최근 1주)", color_discrete_sequence=["#00d4aa"])
         fig_zone.update_layout(paper_bgcolor="rgba(14,17,23,0)", plot_bgcolor="rgba(14,17,23,0)", font={"color": "#fafafa"}, xaxis_tickangle=-25)
-        st.plotly_chart(fig_zone, use_container_width=True)
+        st.plotly_chart(fig_zone, use_column_width=True)
 
     st.markdown("---")
     st.subheader("📁 S63_DATA 로그 파일 목록")
@@ -463,7 +463,7 @@ with tab_stats:
     if not log_df.empty:
         display_df = log_df[["구분", "분류", "데이터셋", "라벨", "파일명"]].copy()
         display_df = display_df.sort_values(["데이터셋", "분류", "파일명"])
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, use_column_width=True, hide_index=True)
         buffer = BytesIO()
         log_df.to_excel(buffer, index=False, engine="openpyxl")
         buffer.seek(0)

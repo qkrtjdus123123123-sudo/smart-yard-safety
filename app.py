@@ -352,7 +352,9 @@ with tab_monitor:
             placeholder_img[:] = (22, 26, 34)
             cv2.putText(placeholder_img, "LIVE CCTV FEED", (160, 220), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 212, 170), 2)
             cv2.putText(placeholder_img, "Press [Webcam On] to start", (140, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 160, 170), 1)
-            st.image(cv2.cvtColor(placeholder_img, cv2.COLOR_BGR2RGB), use_container_width=True, channels="RGB")
+            rgb_placeholder = cv2.cvtColor(placeholder_img, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(rgb_placeholder)
+            st.image(pil_img, use_container_width=True)
         st.caption("실시간 웹캠 피드 (MediaPipe Pose 분석)")
 
     with col_alerts:

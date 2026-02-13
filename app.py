@@ -177,6 +177,28 @@ def check_fall(landmarks, sensitivity=70, use_velocity=True):
     return fall, spine
 
 
+def check_fire(rgb, sensitivity=50):
+    """
+    화재 의심 감지: 이미지에서 불꽃/연기 색(빨강·주황·노랑) 비율이 높으면 True.
+    sensitivity: 0~100, 높을수록 더 민감(낮은 비율에도 감지).
+    """
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    # H: 빨강 0~15, 165~180 / 주황~노랑 15~45
+    lower1 = np.array([0, 100, 150])
+    upper1 = np.array([25, 255, 255])
+    lower2 = np.array([165, 100, 150])
+    upper2 = np.array([180, 255, 255])
+    lower_yellow = np.array([15, 100, 150])
+    upper_yellow = np.array([45, 255, 255])
+    m1 = cv2.inRange(hsv, lower1, upper1)
+    m2 = cv2.inRange(hsv, lower2, upper2)
+    my = cv2.inRange(hsv, lower_yellow, upper_yellow)
+    fire_mask = cv2.bitwise_or(cv2.bitwise_or(m1, m2), my)
+    ratio = np.count_nonzero(fire_mask) / (fire_mask.size + 1e-6)
+    thresh = 0.02 + (100 - sensitivity) / 100.0 * 0.08  # 약 2%~10%
+    return ratio >= thresh, ratio
+
+
 def draw_pose_tasks(frame_rgb, detection_result, vision_module, drawing_utils_module, drawing_styles_module):
     if not detection_result.pose_landmarks:
         return frame_rgb
@@ -293,7 +315,12 @@ with tab_monitor:
             cap = cv2.VideoCapture(0)
             if not cap.isOpened():
                 with col_video:
-                    st.error("웹캠을 열 수 없습니다. 카메라가 연결되어 있는지 확인하세요.")
+                    st.error(
+                        "실시간 웹캠을 사용할 수 없습니다. "
+                        "**링크(인터넷)로 접속 중**이라면 서버에 카메라가 없어 실시간 스트림은 불가합니다. "
+                        "아래 **📸 카메라로 사진 촬영하여 분석**을 사용해 보세요. "
+                        "노트북에서 직접 실행(streamlit run app.py → localhost)한 경우에만 실시간 웹캠이 동작합니다."
+                    )
             else:
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -358,26 +385,45 @@ with tab_monitor:
         st.caption("실시간 웹캠 피드 (MediaPipe Pose 분석)")
 
     st.markdown("---")
-    st.caption("휴대폰·태블릿 또는 웹캠이 안 될 때: 아래에서 카메라로 사진을 찍으면 포즈·추락 분석을 할 수 있습니다.")
+    st.caption("휴대폰·태블릿 또는 웹캠이 안 될 때: 아래에서 카메라로 사진을 찍으면 추락·화재·안전모(안내) 분석을 할 수 있습니다.")
     photo = st.camera_input("📸 카메라로 사진 촬영하여 분석")
     if photo:
+        img_pil = Image.open(photo).convert("RGB")
+        rgb = np.asarray(img_pil)
+        if not rgb.flags.c_contiguous:
+            rgb = np.ascontiguousarray(rgb)
+        h, w = rgb.shape[:2]
+        now = datetime.now()
+        time_str = now.strftime("%H:%M:%S")
+
+        # 화재 분석 (색상 기반 휴리스틱)
+        fire_detected = False
+        if detect_fire:
+            fire_detected, fire_ratio = check_fire(rgb, sensitivity=sensitivity)
+            if fire_detected:
+                alert_text = f"알림: [{time_str}] {zone_number}번 구역 화재 의심!"
+                st.session_state.alerts.insert(0, {"time": time_str, "type": "화재 의심", "level": "danger", "msg": alert_text})
+                snapshot_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                st.session_state.snapshots.insert(0, (time_str, snapshot_bgr))
+                if len(st.session_state.snapshots) > st.session_state.max_snapshots:
+                    st.session_state.snapshots = st.session_state.snapshots[: st.session_state.max_snapshots]
+
+        # 안전모: 전용 모델 없음 → 안내만
+        if detect_helmet:
+            st.info("안전모 감지는 전용 AI 모델이 필요해, 현재 사진 분석에서는 지원하지 않습니다. 실시간 웹캠에서도 동일합니다.")
+
+        # 추락 분석 (MediaPipe Pose)
+        fall_detected = False
         pose_tasks = _pose_with_tasks_api(use_data_model_only=use_data_model_only)
         if pose_tasks is None:
-            st.warning("분석 모델을 불러올 수 없습니다. 표준 모델을 선택했는지 확인하세요.")
+            st.warning("추락 분석용 모델을 불러올 수 없습니다. 표준 모델을 선택했는지 확인하세요.")
+            cv2.putText(rgb, f"분석 {time_str}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 170), 2)
         else:
             detector, vision_module, drawing_utils_module, drawing_styles_module = pose_tasks
-            img_pil = Image.open(photo).convert("RGB")
-            rgb = np.asarray(img_pil)
-            if not rgb.flags.c_contiguous:
-                rgb = np.ascontiguousarray(rgb)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             detection_result = detector.detect(mp_image)
             rgb = draw_pose_tasks(rgb, detection_result, vision_module, drawing_utils_module, drawing_styles_module)
-            now = datetime.now()
-            time_str = now.strftime("%H:%M:%S")
-            h, w = rgb.shape[:2]
             cv2.putText(rgb, f"분석 {time_str}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 170), 2)
-            fall_detected = False
             if detect_fall and detection_result.pose_landmarks:
                 landmarks = detection_result.pose_landmarks[0]
                 fall_detected, _ = check_fall(landmarks, sensitivity=sensitivity, use_velocity=False)
@@ -389,11 +435,19 @@ with tab_monitor:
                     if len(st.session_state.snapshots) > st.session_state.max_snapshots:
                         st.session_state.snapshots = st.session_state.snapshots[: st.session_state.max_snapshots]
                     cv2.putText(rgb, "FALL DETECTED", (w // 2 - 100, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
-            st.image(Image.fromarray(rgb), use_column_width=True)
-            if fall_detected:
-                st.error("⚠️ 추락 의심으로 감지되었습니다. 알림 목록에 추가되었습니다.")
-            else:
-                st.success("분석 완료. 포즈가 정상 범위입니다.")
+        if fire_detected:
+            cv2.putText(rgb, "FIRE DETECTED", (w // 2 - 90, 80 if fall_detected else 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+
+        st.image(Image.fromarray(rgb), use_column_width=True)
+        msgs = []
+        if fall_detected:
+            msgs.append("추락 의심")
+        if fire_detected:
+            msgs.append("화재 의심")
+        if msgs:
+            st.error("⚠️ " + ", ".join(msgs) + " 알림 목록에 추가되었습니다.")
+        else:
+            st.success("분석 완료. 감지된 위험 없음." + (" (안전모는 전용 모델 필요)" if detect_helmet else ""))
 
     with col_alerts:
         if st.session_state.alerts:

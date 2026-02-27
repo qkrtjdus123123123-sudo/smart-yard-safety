@@ -1,4 +1,4 @@
-# Streamlit Cloud
+# Streamlit Cloud (안전모 분석 포함 - 빌드 5~10분 소요될 수 있음)
 streamlit>=1.28.0,<1.40.0
 opencv-python-headless>=4.8.0,<4.10.0
 numpy>=1.24.0,<2.0.0

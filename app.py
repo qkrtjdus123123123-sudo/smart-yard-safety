@@ -220,6 +220,9 @@ def _get_helmet_model():
         return m
     except Exception as e:
         st.session_state.helmet_model_error = str(e)
+        # Cloud 배포에서는 ultralytics 미설치로 실패하는 경우 안내
+        if "No module named 'ultralytics'" in str(e) or "No module named 'torch'" in str(e):
+            st.session_state.helmet_model_error = "Cloud 배포에서는 안전모 분석이 비활성화되어 있습니다. 로컬에서 pip install ultralytics 후 실행하면 사용할 수 있습니다."
         return None
 
 
@@ -327,6 +330,8 @@ with st.sidebar:
     zone_number = st.selectbox("감지 구역", options=[1, 2, 3, 4], index=1, format_func=lambda x: f"{x}번 구역", help="알림에 표시할 작업 구역 번호입니다.")
     sensitivity = st.slider("감지 감도", min_value=1, max_value=100, value=70, step=5, help="높을수록 민감하게 위험을 감지합니다.")
     st.markdown("---")
+    camera_index = st.selectbox("웹캠 장치", options=[0, 1, 2], index=0, format_func=lambda x: f"카메라 {x}", help="USB 카메라가 안 켜지면 1 또는 2로 바꿔 보세요.")
+    st.markdown("---")
     st.markdown("**감지 대상**")
     detect_helmet = st.checkbox("안전모 미착용", value=False)
     detect_fall = st.checkbox("추락", value=True)
@@ -348,6 +353,7 @@ tab_monitor, tab_stats = st.tabs(["실시간 모니터링", "과거 데이터 �
 with tab_monitor:
     col_video, col_alerts = st.columns([3, 1])
     with col_video:
+        st.caption("실시간 웹캠은 **이 앱을 로컬에서 실행했을 때만** 동작합니다. (streamlit run app.py → 브라우저에서 http://localhost:8501 접속) 인터넷 링크(Streamlit Cloud)로 접속 중이면 웹캠을 켤 수 없습니다.")
         video_placeholder = st.empty()
         run_camera = st.button("📷 웹캠 켜기 (실시간 분석)")
     with col_alerts:
@@ -363,14 +369,14 @@ with tab_monitor:
                     st.error("MediaPipe Pose를 초기화할 수 없습니다. pose_landmarker_lite.task 모델을 다운로드할 수 있는지 확인하세요.")
         else:
             detector, vision_module, drawing_utils_module, drawing_styles_module = pose_tasks
-            cap = cv2.VideoCapture(0)
+            cap = cv2.VideoCapture(int(camera_index))
             if not cap.isOpened():
                 with col_video:
                     st.error(
                         "실시간 웹캠을 사용할 수 없습니다. "
-                        "**링크(인터넷)로 접속 중**이라면 서버에 카메라가 없어 실시간 스트림은 불가합니다. "
-                        "아래 **📸 카메라로 사진 촬영하여 분석**을 사용해 보세요. "
-                        "노트북에서 직접 실행(streamlit run app.py → localhost)한 경우에만 실시간 웹캠이 동작합니다."
+                        "**인터넷 링크(Streamlit Cloud)**로 접속 중이라면 서버에 카메라가 없어 불가합니다. "
+                        "로컬에서 실행 중인데도 안 되면: 사이드바 **웹캠 장치**를 '카메라 1' 또는 '카메라 2'로 바꿔 보세요. "
+                        "그래도 안 되면 **📸 카메라로 사진 촬영하여 분석**을 사용해 보세요."
                     )
             else:
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)

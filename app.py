@@ -359,46 +359,42 @@ with tab_monitor:
         st.subheader("🚨 실시간 위험 알림 내역")
 
     if run_camera:
-        pose_tasks = _pose_with_tasks_api(use_data_model_only=use_data_model_only)
-        if pose_tasks is None:
+        cap = cv2.VideoCapture(int(camera_index))
+        if not cap.isOpened():
             with col_video:
-                if use_data_model_only:
-                    st.error("data 폴더에서 .task 모델을 찾지 못했습니다. data/선박·해양플랜트 스마트 야드 안전 데이터/AI 모델.zip 또는 data 내 .task 파일을 확인하세요.")
-                else:
-                    st.error("MediaPipe Pose를 초기화할 수 없습니다. pose_landmarker_lite.task 모델을 다운로드할 수 있는지 확인하세요.")
+                st.error(
+                    "실시간 웹캠을 사용할 수 없습니다. "
+                    "로컬에서 실행 중인데도 안 되면: 사이드바 **웹캠 장치**를 '카메라 1' 또는 '카메라 2'로 바꿔 보세요. "
+                    "인터넷 링크로 접속 중이면 서버에 카메라가 없어 불가합니다."
+                )
         else:
-            detector, vision_module, drawing_utils_module, drawing_styles_module = pose_tasks
-            cap = cv2.VideoCapture(int(camera_index))
-            if not cap.isOpened():
+            pose_tasks = _pose_with_tasks_api(use_data_model_only=use_data_model_only)
+            if pose_tasks is None:
                 with col_video:
-                    st.error(
-                        "실시간 웹캠을 사용할 수 없습니다. "
-                        "**인터넷 링크(Streamlit Cloud)**로 접속 중이라면 서버에 카메라가 없어 불가합니다. "
-                        "로컬에서 실행 중인데도 안 되면: 사이드바 **웹캠 장치**를 '카메라 1' 또는 '카메라 2'로 바꿔 보세요. "
-                        "그래도 안 되면 **📸 카메라로 사진 촬영하여 분석**을 사용해 보세요."
-                    )
-            else:
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                max_frames = 900
-                cooldown_sec = 3.0
-                status_placeholder = st.empty()
-                for frame_idx in range(max_frames):
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    frame = cv2.flip(frame, 1)
-                    h, w = frame.shape[:2]
-                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    if not rgb.flags.c_contiguous:
-                        rgb = np.ascontiguousarray(rgb)
+                    st.info("추락 분석용 모델(MediaPipe) 없음 → 카메라만 표시합니다. pose_landmarker_lite.task를 프로젝트 폴더에 두면 추락 분석이 켜집니다.")
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            max_frames = 900
+            cooldown_sec = 3.0
+            status_placeholder = st.empty()
+            detector, vision_module, drawing_utils_module, drawing_styles_module = (pose_tasks or (None, None, None, None))
+
+            for frame_idx in range(max_frames):
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frame = cv2.flip(frame, 1)
+                h, w = frame.shape[:2]
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                if not rgb.flags.c_contiguous:
+                    rgb = np.ascontiguousarray(rgb)
+                now = datetime.now()
+                time_str = now.strftime("%H:%M:%S")
+
+                if pose_tasks is not None:
                     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                     detection_result = detector.detect(mp_image)
                     rgb = draw_pose_tasks(rgb, detection_result, vision_module, drawing_utils_module, drawing_styles_module)
-                    now = datetime.now()
-                    time_str = now.strftime("%H:%M:%S")
-                    cv2.putText(rgb, f"LIVE {time_str}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 170), 2)
-
                     fall_detected = False
                     if detect_fall and detection_result.pose_landmarks:
                         landmarks = detection_result.pose_landmarks[0]
@@ -419,15 +415,24 @@ with tab_monitor:
                                     cv2.imwrite(os.path.join(LOGS_SNAPSHOTS_DIR, fname), snapshot_copy)
                                 except Exception:
                                     pass
+                        else:
+                            st.session_state.prev_spine_ratio = None
                     else:
                         st.session_state.prev_spine_ratio = None
-
+                    if not rgb.flags.writeable:
+                        rgb = np.copy(rgb)
+                    cv2.putText(rgb, f"LIVE {time_str}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 170), 2)
                     if fall_detected:
                         cv2.putText(rgb, "FALL DETECTED", (w // 2 - 100, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
-                    video_placeholder.image(rgb, use_column_width=True, channels="RGB")
-                cap.release()
-                status_placeholder.success("웹캠 분석을 종료했습니다. 알림과 최근 로그를 확인하세요.")
-                st.rerun()
+                else:
+                    if not rgb.flags.writeable:
+                        rgb = np.copy(rgb)
+                    cv2.putText(rgb, f"LIVE {time_str} (추락 분석 없음)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 170), 2)
+
+                video_placeholder.image(rgb, use_column_width=True, channels="RGB")
+            cap.release()
+            status_placeholder.success("웹캠을 종료했습니다.")
+            st.rerun()
 
     if not run_camera:
         with video_placeholder.container():

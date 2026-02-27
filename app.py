@@ -353,7 +353,6 @@ tab_monitor, tab_stats = st.tabs(["실시간 모니터링", "과거 데이터 �
 with tab_monitor:
     col_video, col_alerts = st.columns([3, 1])
     with col_video:
-        st.caption("실시간 웹캠은 **이 앱을 로컬에서 실행했을 때만** 동작합니다. (streamlit run app.py → 브라우저에서 http://localhost:8501 접속) 인터넷 링크(Streamlit Cloud)로 접속 중이면 웹캠을 켤 수 없습니다.")
         video_placeholder = st.empty()
         run_camera = st.button("📷 웹캠 켜기 (실시간 분석)")
     with col_alerts:

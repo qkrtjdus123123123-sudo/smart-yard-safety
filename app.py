@@ -447,6 +447,7 @@ with tab_monitor:
 
     st.markdown("---")
     st.caption("휴대폰·태블릿 또는 웹캠이 안 될 때: 아래에서 카메라로 사진을 찍으면 추락·화재·안전모 분석을 할 수 있습니다.")
+    st.caption("💡 **카메라가 안 켜지면** 브라우저에서 '이 앱에서 카메라를 사용할 수 있도록 허용'을 눌러 주세요. (주소창 옆 🔒 → 사이트 설정 → 카메라 허용)")
     photo = st.camera_input("📸 카메라로 사진 촬영하여 분석")
     if photo:
         img_pil = Image.open(photo).convert("RGB")
